@@ -3,7 +3,19 @@ var app = require('express')();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var url = require('url');
+var db;
 
+// connect to mongo db
+var mongo_client = require('mongodb').MongoClient, assert = require('assert');
+var url = 'mongodb://localhost:7810/shareboard' 
+mongo_client.connect(url, function(err, database){
+ 	assert.equal(null, err);
+	console.log("connected successfully to server");
+
+	db = database;
+});
+
+// request routers
 app.get('/', function(request, response){
 	response.sendFile('/home/ifan/node_server/fishball/index.html');
 	var path = url.parse(request.url).pathname;
@@ -11,10 +23,20 @@ app.get('/', function(request, response){
 });
 
 app.get('/private_get', function(req, res){
-	//room_id = req.query.room_id;
-	//console.log("room_id:%s", room_id);
+	req_room_id = parseInt(req.query.room_id);
+	var col = db.collection('rooms');
+	//console.log("room_id:%s", req_room_id);
 	//res.send("server get room_id success!");
-	res.sendFile('/home/ifan/node_server/fishball/index.html');
+	col.find({'room_id':req_room_id}).toArray(function(err, docs){
+		assert.equal(null, err);	
+		console.log(docs);
+		if(docs.length == 0){
+			console.log("no room_id:", req_room_id);	
+			res.send("no current room_id");			
+		}else{
+			res.sendFile('/home/ifan/node_server/fishball/index.html');
+		}
+	});	
 });
 
 // get web chat interface 
@@ -25,10 +47,26 @@ app.get('/chat_get', function(req, res){
 	res.sendFile('/home/ifan/node_server/fishball/chat_index.html');
 });
 
-
 // generate room id
 app.get('/gene_room_id', function(req, res){
- 	res.send("generate a room_id");	
+	var col = db.collection('rooms');
+	
+	col.find().sort({'room_id':-1}).toArray(function(err, docs){
+		assert.equal(err, null);	
+		console.log("found the following result");
+		res.send("generate a room_id");	
+		
+		// get the top room id
+		var current_rm_id = docs[0]['room_id'];
+		console.log("current rm_id: ", current_rm_id);
+
+		// insert a new room id
+		col.insert({'room_id': current_rm_id + 1}, function(err, result){
+			assert.equal(null, err);
+			console.log("insert new room_id: ", result);
+		});
+	});
+	
 });
 
 io.on('connection', function(socket){
